@@ -3,11 +3,11 @@
 A context monitoring Android app for CSE 535 Project 1.
 
 **Name:** Barath Suresh
-**ASU ID:** <!-- TODO: add your ASU ID -->
+**ASU ID:** 1237353860
 
 ## Links
 
-- GitHub repository (private): <!-- TODO -->
+- GitHub repository (private): [VitalCheck](https://github.com/barathsuresh/VitalCheck)
 - Demo video (unlisted YouTube): <!-- TODO -->
 
 ## What the app does
