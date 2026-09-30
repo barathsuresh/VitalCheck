@@ -157,178 +157,108 @@ process.
 
 ### Q1. What specifications would you give to Health-Dev?
 
-Health-Dev is a tool that writes the code for you. You describe what your system
-senses and what it should compute, and it generates the sensor and phone code from
-that description. So the answer is not what I would program. It is what I would tell
-it.
+Health-Dev writes the sensor and phone code for you from a description, so what I would
+be producing is a description rather than a program. It asks for three things.
 
-It asks for three kinds of information.
+For the sensors, I would describe the two signals I need. One is a light reading from
+the rear camera with the flash on. The other is accelerometer data with the phone
+resting on the chest. Both run for 45 seconds. Then I would name the algorithms to run
+on each one. Health-Dev keeps a library of ready-made algorithms and matches on the name
+I give it. Heart rate is covered, because the paper lists a PPG pulse width calculator,
+which is the same camera method this app uses. Breathing is not, so I would have to write
+that one myself and add it to the library. Finally I would connect the algorithms up so
+it knows what feeds into what.
 
-**1. The sensors.**
+The network section barely applies. It is meant for separate sensor boards talking to a
+phone over Bluetooth, with addresses and routing. Both my sensors are inside the phone,
+so I would describe a single node with the radio off.
 
-For each signal I would say what kind of sensor it is, what hardware it runs on, and
-how often it should be read. VitalCheck has two signals. One is a light reading from
-the rear camera with the flash on, taken from a 45 second video. The other is an
-accelerometer reading taken with the phone on the chest, also for 45 seconds.
+Most of the app sits in the phone section. The buttons for recording, measuring and
+deleting, the text showing the two results, and which algorithms run on the phone, since
+all the processing happens there rather than on a separate sensor.
 
-Next I would name the algorithms to run on each signal. Health-Dev keeps a library of
-ready-made algorithms and checks whether the name I give matches one it already has.
-For heart rate it does. The paper lists a PPG pulse width calculator, which is exactly
-the camera method this app uses. For breathing there is no match, so the paper says I
-would have to write that one myself and add it to the library.
+There are a few things it could not do for me. Its hardware library covers small sensor
+boards, not a phone's own camera, so there is nothing for it to build the heart rate side
+from. It generates sensing and processing code but not storage, so the database would
+still be mine to write. And the paper admits it cannot do adaptive thresholds, which is
+exactly the problem I ran into with the breathing calculation, where one fixed number
+only works under one set of conditions.
 
-Then I would say what order things run in, by connecting each algorithm's output to
-the next one's input:
-
-```
-camera frames -> average brightness -> remove drift -> count peaks -> heart rate
-accelerometer -> combine the three axes -> count threshold crossings -> breathing rate
-```
-
-**2. The network.**
-
-Health-Dev was built for systems where separate sensors talk to a phone over
-Bluetooth or ZigBee. This section is for node addresses, routing and radio settings.
-
-VitalCheck has none of that. Both sensors are inside the same phone that would
-normally be the base station. So I would describe a single node with no routing and
-the radio switched off. It fits, but only just.
-
-**3. The phone screen.**
-
-Most of this app lives here. I would list:
-
-- The buttons and what each one does. Record Health Data, Measure Heart Rate, Measure
-  Respiratory Rate, Upload Symptoms and Delete All Recorded Data. The measure buttons
-  map onto Health-Dev's own start and stop sensing commands.
-- The text to display. Heart rate in bpm, breathing rate in breaths per minute, and
-  how many records are saved.
-- Optionally a graph of the brightness signal, so the pulse can be seen being picked
-  up.
-- Which algorithms run on the phone and in what order, since in this app all the
-  processing happens on the phone rather than on a separate sensor.
-- Commands to change how often a sensor is read, which is how I would express the
-  breathing rate re-spacing.
-
-**Where Health-Dev would not be enough.**
-
-Four things it could not do for me.
-
-- Its hardware library covers small sensor boards like TelosB, Shimmer and Arduino.
-  There is no entry for a phone's own camera as a sensor, so it has nothing to build
-  the heart rate front end from.
-- The paper says the phone screen generator only handles algorithms with one input and
-  cannot express complicated sequences. This app records, analyses, moves to another
-  screen, collects symptoms and then saves. That is more than it supports.
-- It generates sensing and processing code but not storage. The database would still
-  be written by hand.
-- The paper's own conclusion says it cannot do adaptive thresholds. That is exactly the
-  problem I ran into with the breathing calculation, where a single fixed number only
-  works under one set of conditions.
-
-So Health-Dev would handle the sensor reading and the signal processing, which is the
-hardest part for someone who cannot program. The database, the screen flow and the
-camera side would still be manual work.
+So it would cover the sensing and the signal processing, which is genuinely the hardest
+part if you cannot program. I would still be writing the database and the screens.
 
 ### Q2. How would you use bHealthy to give feedback and model the user?
 
-At the moment VitalCheck only measures and saves. It never tells the user anything.
-bHealthy shows how to close that loop. It has five parts, and each one maps onto
-something this app could do.
+VitalCheck measures, saves, and stops. It never tells the user anything. bHealthy is
+built around closing that loop.
 
-**Work out how the user is doing.** bHealthy scores wellbeing out of 10 by combining
-sensor readings with how the person has been using the apps. VitalCheck already has
-what it needs: heart rate, breathing rate, and ten symptom ratings. It could turn
-those into one score per session. A high breathing rate on its own means something
-very different from a high breathing rate when the user has also reported
-breathlessness, and the symptom rating is what tells those two apart.
+The first thing I would add is a score. bHealthy rates wellbeing out of 10 from sensor
+data combined with how the person has been using the apps. I already collect heart rate,
+breathing rate and ten symptom ratings, so I could turn those into one number per
+session. The symptom ratings are what make it work. A high breathing rate on its own
+means something very different from a high breathing rate when the user has also said
+they feel short of breath.
 
-**Suggest something useful.** bHealthy recommends activities that are known to help
-with a particular state. Here that could mean suggesting a breathing exercise when the
-breathing rate is up and the user reported breathlessness, or rest and a short walk
-when the heart rate is up and they reported feeling tired.
+From that score the app could suggest something. A breathing exercise if the rate is up
+and they reported breathlessness, or rest if their heart rate is up and they said they
+felt tired.
 
-**The new app I would build: a breathing trainer.** This is based on how bHealthy's
-BrainHealth app works. The user lies down with the phone on their chest, exactly as
-they already do for the breathing measurement. The app shows a pace to follow while
-the accelerometer measures what they are actually doing. BrainHealth uses particles on
-screen that pull together when the user is doing well and scatter when they are not,
-and the same idea works here. It reuses the sensor code that already exists and turns a
-one-off measurement into a loop: measure, give feedback, measure again.
+The app I would actually build is a breathing trainer, based on bHealthy's BrainHealth.
+You lie down with the phone on your chest, the same as the existing measurement, and it
+shows you a pace to follow while the accelerometer checks what you are really doing.
+BrainHealth uses particles on screen that pull together when you are doing well and
+scatter when you are not, and the same idea works here. It reuses sensor code I already
+have, and it turns a one-off reading into measure, feedback, measure again.
 
-**Show progress over time.** bHealthy produces a report by looking at a period of
-stored data. The database already saves a timestamp with every record, so showing
-trends over weeks is just a matter of reading it back.
+For building a model of the user, bHealthy makes the point that its sensor layer creates
+a shared database that the other apps all read from. My `records` table is already that.
+With enough rows it stops being a list of readings and becomes a description of one
+person, their normal heart rate and their usual breathing rate.
 
-**Building a picture of the user.** This is the most useful part. bHealthy points out
-that its sensor layer creates a shared database that all the other apps read from, and
-that this shared database is what lets them work together. The `records` table is
-already that database.
-
-Once there are enough rows it stops being a list of readings and becomes a description
-of one specific person. Their normal resting heart rate. Their usual breathing rate.
-Which symptoms tend to appear together.
-
-That improves the sensing in two ways.
-
-First, the fixed numbers could become personal ones. The breathing calculation uses a
-single threshold for everybody, and I found out by testing that it only works under
-one particular set of conditions. With a history for each user, that threshold could
-come from how deeply that person actually breathes. That is the adaptive thresholding
-Health-Dev says it cannot generate, and it would remove the most fragile number in my
-code.
-
-Second, the symptom ratings are labels the user writes themselves. Every row pairs
-sensor readings with how that person actually felt at the time. That makes the saved
-data a training set. The app could learn that a slightly high heart rate is normal for
-this particular user when they have a mild fever, instead of comparing them against an
-average of everybody.
+That gives you two things. The fixed threshold in the breathing calculation could come
+from how deeply that particular person breathes, rather than being the same number for
+everyone. And the symptom ratings are labels the user wrote themselves, so every row
+pairs a sensor reading with how they actually felt. That makes the stored data something
+you could train on.
 
 ### Q3. Is mobile computing mostly app development?
 
-My view did change, and it changed because of where the time actually went.
+It did change, mostly because of where my time went.
 
-I expected the hard part to be Android itself. The screens, the navigation, the
-database. That turned out to be the easy part. Room, Compose and Navigation all worked
-the way the documentation said they would, and once I understood the patterns the three
-screens came together quickly. If mobile computing were mostly app development, I would
-have been nearly finished at that point.
+I assumed the hard part would be Android itself, the screens and the navigation and the
+database. That turned out to be the predictable part. Room, Compose and Navigation all
+behaved the way the documentation said, and once I had the patterns the three screens
+came together quickly. If this were mostly app development I would have been close to
+finished there.
 
-Almost everything that actually cost me time was underneath the app.
+Nearly everything that cost me real time was underneath the app.
 
-The breathing rate is the clearest example. The calculation compares two accelerometer
-readings that sit next to each other, so whether it works depends entirely on how far
-apart those readings are in time. I assumed that asking Android for a particular speed
-would give me that speed. It does not. Those settings are requests, not promises, and
-my phone delivered readings far more often than I asked for. The fix was not an API
-call. It was realising that the spacing between readings was part of the signal
-processing, and correcting it myself before doing any maths.
+The breathing rate is the clearest case. The calculation compares two accelerometer
+readings sitting next to each other, so whether it works at all depends on how far apart
+they are in time. I assumed asking Android for a particular sampling speed would give me
+that speed. It does not. Those settings are requests, not promises, and my phone gave
+readings far more often than I asked for. The fix was not an API call. It was working out
+that the spacing between readings was part of the signal processing and correcting it
+myself before doing any maths.
 
-Heart rate was the same problem, worse. The provided code was built around numbers that
-only make sense if the camera records several times faster than mine does. At my
-phone's speed it was looking at the pulse too rarely to see it, and then smoothing over
-a window wide enough to erase it. What gave it away was not an error message. It was the
-shape of the answers it produced, which could only ever land on certain values. Fixing
-it meant reading the video's real speed while the app runs and working everything out
-from that. That is a sampling problem, not a programming one.
+Heart rate was the same problem, worse. The provided code assumes the camera records
+several times faster than mine does. At my phone's speed it looked at the pulse too
+rarely to see it, then smoothed over a window wide enough to erase what was left. There
+was no error message. What gave it away was noticing its answers could only ever land on
+certain values.
 
-Even the tools turned into a systems problem. I could not use Android Studio's database
-inspector, because the security policy on my phone has no entry for debuggable apps, so
-no debugger could attach at all. What I did instead was make the app display its own
-saved records on screen. That is an architecture decision forced by a platform rule.
+Even the tooling turned into a systems problem. I could not use Android Studio's database
+inspector because the security policy on my phone has no entry for debuggable apps, so
+nothing could attach. I ended up making the app display its own saved records instead,
+which is an architecture decision forced on me by a platform rule.
 
-So I no longer think mobile computing is mostly app development. The app is how the
-work reaches the user. The subject itself is everything underneath.
-
-It is signal processing, because a camera and an accelerometer give you noisy readings
-that have to be sampled and interpreted properly. It is systems work, because the
-platform decides what your code is allowed to do and when it is allowed to run. It is
-working within limits, because a 45 second measurement has to survive the screen
-turning off and the system trying to suspend the app. And it is about people, because
-the measurement is only as good as someone's ability to hold a finger still on a lens,
-which is why the camera preview mattered far more than it looked like it would.
-
-App development is the visible part. It is not the difficult part.
+So no, I do not think it is mostly app development any more. The app is how the work
+reaches someone. The subject is what sits under it. Sampling and signal processing,
+because the sensors give you noisy readings that have to be interpreted properly.
+Systems, because the platform decides what your code is allowed to do and when. Working
+inside limits, because a 45 second measurement has to survive the screen turning off. And
+people, because the reading is only as good as someone's ability to hold a finger still
+on a lens, which is why the camera preview ended up mattering more than I expected.
 
 ## Generative AI Acknowledgment
 
