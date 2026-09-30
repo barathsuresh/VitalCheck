@@ -44,7 +44,7 @@ fun VitalsNavigation(navController: NavHostController = rememberNavController())
                 navArgument("heartRate") { type = NavType.IntType },
                 navArgument("respiratoryRate") { type = NavType.IntType },
             ),
-        ) { backStackEntry -> // only if both the values are there we can go to SymptomsScreen
+        ) { backStackEntry -> // fetch arguments from previous screen
             val heartRate = backStackEntry.arguments?.getInt("heartRate") ?: 0
             val respiratoryRate = backStackEntry.arguments?.getInt("respiratoryRate") ?: 0
             SymptomsScreen(

@@ -13,44 +13,50 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.provider.MediaStore
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private const val TAG = "VitalCheckHR"
+
+/** Brightness readings per second. A 1-1.7 Hz pulse needs well above 2 Hz to locate peaks. */
 private const val TARGET_SAMPLE_HZ = 10f
+
+/** Seconds of video analysed. Decoding a frame costs ~10ms, so all 1350 would take minutes. */
 private const val WINDOW_SECONDS = 10f
+
+/** Detrend window. Spans several beats, so averaging over it leaves only the slow drift. */
 private const val DETREND_SECONDS = 3f
+
+/** Upper physiological limit, used to reject peaks too close together to be real beats. */
 private const val MAX_BPM = 180f
 
 /**
- * Derives heart rate from the finger-over-lens recording.
+ * Heart rate in bpm from a finger-over-lens recording.
  *
- * This reads the same signal as the course's [heartRateCalculator] — total frame
- * brightness while the flash shines through the fingertip, which dips with each pulse
- * as blood volume rises — but samples and scales it from the video's real frame rate.
+ * Each beat pushes blood into the fingertip, which absorbs more of the flash, so the
+ * frames dim once per beat. Every constant here is in seconds and converted using the
+ * video's measured frame rate, so the maths holds whatever speed the camera recorded at.
  *
- * The provided helper steps 15 frames at a time over at most 425 frames and divides by
- * a hardcoded 4 seconds, which only lines up with a recording near 106fps. At the 30fps
- * this app records, those same constants sample the pulse at ~2Hz (below what a ~1.2Hz
- * pulse needs) and then apply a 5-point moving average spanning 2.5s, which averages the
- * beat away entirely. Its final `count * 60 / 4` also quantises every result to a
- * multiple of 15 bpm.
+ * Returns 0 if the video cannot be read or holds too little usable signal.
  */
 suspend fun heartRateFromVideo(uri: Uri, contentResolver: ContentResolver): Int =
     withContext(Dispatchers.IO) {
-        val path = resolveVideoPath(uri, contentResolver)
-        if (path == null) {
-            Log.e(TAG, "could not resolve a file path for $uri")
+        // Open the content URI directly. The MediaStore DATA path column is deprecated
+        // and returns null on some devices under scoped storage.
+        val descriptor = contentResolver.openFileDescriptor(uri, "r")
+        if (descriptor == null) {
+            Log.e(TAG, "could not open $uri")
             return@withContext 0
         }
 
         val retriever = MediaMetadataRetriever()
         try {
-            retriever.setDataSource(path)
+            retriever.setDataSource(descriptor.fileDescriptor)
 
+            // Measure the real frame rate instead of assuming 30. It varies by device,
+            // capture mode and lighting, and every step below is scaled from it.
             val frameCount = retriever
                 .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)
                 ?.toIntOrNull() ?: 0
@@ -60,18 +66,18 @@ suspend fun heartRateFromVideo(uri: Uri, contentResolver: ContentResolver): Int 
             val fps = if (durationMs > 0 && frameCount > 0) frameCount * 1000f / durationMs else 0f
             if (fps <= 0f || frameCount < 32) return@withContext 0
 
-            // Sampling every `step` frames lands close to TARGET_SAMPLE_HZ whatever the
-            // camera recorded at, so the pulse is never under-sampled.
             val step = (fps / TARGET_SAMPLE_HZ).roundToInt().coerceAtLeast(1)
+            // Recomputed because step was rounded: at 25fps the real rate is 8.33Hz, not 10.
             val sampleHz = fps / step
             val lastFrame = minOf(frameCount - 1, (10 + WINDOW_SECONDS * fps).toInt())
 
+            // Skip the first 10 frames, recorded while auto-exposure is still settling.
             val signal = mutableListOf<Float>()
             var index = 10
             while (index <= lastFrame) {
                 retriever.getFrameAtIndex(index)?.let { bitmap ->
                     signal.add(averageBrightness(bitmap))
-                    bitmap.recycle()
+                    bitmap.recycle() // Each frame is several MB; holding ~100 would run out of memory.
                 }
                 index += step
             }
@@ -81,6 +87,7 @@ suspend fun heartRateFromVideo(uri: Uri, contentResolver: ContentResolver): Int 
             val detrended = detrend(signal, detrendWindow)
             val refractorySamples = sampleHz * 60f / MAX_BPM
             val peaks = countPeaks(detrended, refractorySamples)
+            // Elapsed time comes from the samples actually collected, not a fixed constant.
             val seconds = signal.size / sampleHz
             val bpm = if (seconds > 0f) (peaks * 60f / seconds).roundToInt() else 0
 
@@ -90,20 +97,19 @@ suspend fun heartRateFromVideo(uri: Uri, contentResolver: ContentResolver): Int 
             Log.e(TAG, "heartRateFromVideo failed", e)
             0
         } finally {
+            // The retriever reads frames long after setDataSource returns, so the
+            // descriptor has to stay open until the analysis is done.
             retriever.release()
+            descriptor.close()
         }
     }
 
-private fun resolveVideoPath(uri: Uri, contentResolver: ContentResolver): String? {
-    val projection = arrayOf(MediaStore.Images.Media.DATA)
-    contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-        val columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
-        if (cursor.moveToFirst()) return cursor.getString(columnIndex)
-    }
-    return null
-}
-
-/** Mean of R+G+B over a grid of roughly 64x64 sampled pixels. */
+/**
+ * Mean of R+G+B over a grid of roughly 64x64 pixels.
+ *
+ * The fingertip fills the frame and is near uniform, so a grid is as good as all two
+ * million pixels. Deriving the step from the bitmap keeps this correct at any resolution.
+ */
 private fun averageBrightness(bitmap: Bitmap): Float {
     val stepX = (bitmap.width / 64).coerceAtLeast(1)
     val stepY = (bitmap.height / 64).coerceAtLeast(1)
@@ -124,13 +130,16 @@ private fun averageBrightness(bitmap: Bitmap): Float {
 }
 
 /**
- * Subtracts a centered moving average. The window is long relative to a heartbeat, so
- * it tracks only lighting drift and finger-pressure changes, leaving the pulse behind.
+ * Subtracts a centred moving average, leaving the signal wobbling around zero.
+ *
+ * Finger movement and pressure drift far more than the pulse does. The window spans
+ * several beats, so its average tracks only that drift and subtracting it leaves the pulse.
  */
 private fun detrend(signal: List<Float>, window: Int): FloatArray {
     val out = FloatArray(signal.size)
     val half = window / 2
     for (i in signal.indices) {
+        // Clamped at both ends, and divided by the count actually in range.
         val from = (i - half).coerceAtLeast(0)
         val to = (i + half).coerceAtMost(signal.size - 1)
         var sum = 0f
@@ -140,12 +149,20 @@ private fun detrend(signal: List<Float>, window: Int): FloatArray {
     return out
 }
 
-/** Counts local maxima above the trend, ignoring any closer together than MAX_BPM allows. */
+/**
+ * Counts beats as local maxima above the trend line.
+ *
+ * [refractorySamples] is the closest two beats could physically be, which stops one
+ * jagged peak from being counted several times.
+ */
 private fun countPeaks(signal: FloatArray, refractorySamples: Float): Int {
     var peaks = 0
     var lastPeak = Float.NEGATIVE_INFINITY
+    // Ends are skipped since they have no neighbour on one side. The > and >= pair
+    // counts a flat top once rather than twice or not at all.
     for (i in 1 until signal.size - 1) {
         val isLocalMax = signal[i] > signal[i - 1] && signal[i] >= signal[i + 1]
+        // Above zero means above the local trend, so bumps inside a trough are ignored.
         if (isLocalMax && signal[i] > 0f && i - lastPeak >= refractorySamples) {
             peaks++
             lastPeak = i.toFloat()

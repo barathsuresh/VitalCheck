@@ -34,6 +34,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val records: StateFlow<List<HealthRecordEntity>> = repository.getAllRecords()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * Delete all the records from the database
+     */
     fun deleteAllData(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             repository.deleteAllRecords()

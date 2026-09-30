@@ -142,7 +142,7 @@ fun VitalsScreen(
             )
 
             Spacer(Modifier.height(32.dp))
-
+            // Button Enabled when both heart rate and respiratory rate are measured
             Button(
                 onClick = { onContinue(viewModel.heartRateValue(), viewModel.respiratoryRateValue()) },
                 enabled = viewModel.canContinue,

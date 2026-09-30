@@ -4,7 +4,7 @@ import kotlin.math.abs
 import kotlin.math.pow
 
 /**
- * Code provided from the material
+ * Code provided from the materialq
  */
 fun respiratoryRateCalculator(
     accelValuesX: MutableList<Float>,

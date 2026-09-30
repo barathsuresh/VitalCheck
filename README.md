@@ -8,7 +8,7 @@ A context monitoring Android app for CSE 535 Project 1.
 ## Links
 
 - GitHub repository (private): [VitalCheck](https://github.com/barathsuresh/VitalCheck)
-- Demo video (unlisted YouTube): <!-- TODO -->
+- Demo video (unlisted YouTube): [VitalCheck demo](https://youtu.be/5vVTxEvOyhE)
 
 ## What the app does
 
@@ -327,7 +327,7 @@ App development is the visible part of it. It is not the difficult part.
 Portions of the code in this project were generated with assistance from Claude, an AI
 tool developed by Anthropic.
 
-Reference: Anthropic. (2026). Claude [Large language model]. https://claude.ai
+Reference: Anthropic. (2026). Claude [Opus 5]. https://claude.ai
 
 Estimated percentage of code influenced by Generative AI: 40%
 
@@ -342,3 +342,9 @@ covered part of a file, the comment says which part.
 2. J. Milazzo, P. Bagade, A. Banerjee and S. K. S. Gupta, "bHealthy: A Physiological
    Feedback-based Mobile Wellness Application Suite", Wireless Health '13, Baltimore,
    MD, USA.
+3. Android Developers, "Motion Sensors", Google LLC.
+   https://developer.android.com/develop/sensors-and-location/sensors/sensors_motion
+4. Android Developers, "SensorManager", Google LLC.
+   https://developer.android.com/reference/android/hardware/SensorManager
+5. Android Developers, "CameraX Overview", Google LLC.
+   https://developer.android.com/media/camera/camerax
